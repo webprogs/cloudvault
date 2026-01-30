@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FileController extends Controller
@@ -139,18 +141,65 @@ class FileController extends Controller
         return back()->with('success', "{$count} file(s) uploaded successfully.");
     }
 
-    public function download(File $file): StreamedResponse
+    public function download(File $file): StreamedResponse|RedirectResponse
     {
         // Check ownership
         if ($file->user_id !== auth()->id()) {
             abort(403, 'Unauthorized');
         }
 
-        if (!Storage::exists($file->storage_path)) {
+        // If file is on GCP, redirect to signed URL
+        if ($file->isOnGcp()) {
+            try {
+                $url = Storage::disk('gcs')->temporaryUrl(
+                    $file->gcp_path,
+                    now()->addMinutes(15),
+                    [
+                        'ResponseContentDisposition' => 'attachment; filename="' . $file->name . '"',
+                    ]
+                );
+                return redirect($url);
+            } catch (\Throwable $e) {
+                // If GCS fails, try local fallback
+                if (Storage::disk('local')->exists($file->storage_path)) {
+                    return Storage::disk('local')->download($file->storage_path, $file->name);
+                }
+                abort(404, 'File not found');
+            }
+        }
+
+        // Local file download
+        if (!Storage::disk('local')->exists($file->storage_path)) {
             abort(404, 'File not found');
         }
 
-        return Storage::download($file->storage_path, $file->name);
+        return Storage::disk('local')->download($file->storage_path, $file->name);
+    }
+
+    public function processingStatus(File $file): JsonResponse
+    {
+        // Check ownership
+        if ($file->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
+        return response()->json([
+            'id' => $file->id,
+            'name' => $file->name,
+            'processing_status' => $file->processing_status,
+            'storage_disk' => $file->storage_disk,
+            'is_on_gcp' => $file->isOnGcp(),
+            'logs' => $file->processingLogs()
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(fn ($log) => [
+                    'step' => $log->step,
+                    'status' => $log->status,
+                    'message' => $log->message,
+                    'started_at' => $log->started_at?->toIso8601String(),
+                    'completed_at' => $log->completed_at?->toIso8601String(),
+                ]),
+        ]);
     }
 
     public function thumbnail(File $file)
@@ -208,13 +257,24 @@ class FileController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        // Delete original from storage
-        Storage::delete($file->storage_path);
+        // Delete from GCP if stored there
+        if ($file->isOnGcp()) {
+            try {
+                Storage::disk('gcs')->delete($file->gcp_path);
+            } catch (\Throwable $e) {
+                // Log but continue - file may already be deleted
+            }
+        }
+
+        // Delete from local storage
+        if ($file->storage_path && Storage::disk('local')->exists($file->storage_path)) {
+            Storage::disk('local')->delete($file->storage_path);
+        }
 
         // Delete thumbnail if exists
         $this->thumbnailService->deleteThumbnail($file->storage_path);
         if ($file->thumbnail_path) {
-            Storage::delete($file->thumbnail_path);
+            Storage::disk('local')->delete($file->thumbnail_path);
         }
 
         // Delete database record
@@ -235,11 +295,24 @@ class FileController extends Controller
             ->get();
 
         foreach ($files as $file) {
-            Storage::delete($file->storage_path);
+            // Delete from GCP if stored there
+            if ($file->isOnGcp()) {
+                try {
+                    Storage::disk('gcs')->delete($file->gcp_path);
+                } catch (\Throwable $e) {
+                    // Log but continue - file may already be deleted
+                }
+            }
+
+            // Delete from local storage
+            if ($file->storage_path && Storage::disk('local')->exists($file->storage_path)) {
+                Storage::disk('local')->delete($file->storage_path);
+            }
+
             // Delete thumbnail if exists
             $this->thumbnailService->deleteThumbnail($file->storage_path);
             if ($file->thumbnail_path) {
-                Storage::delete($file->thumbnail_path);
+                Storage::disk('local')->delete($file->thumbnail_path);
             }
             $file->delete();
         }

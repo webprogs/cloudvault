@@ -1,12 +1,17 @@
 import { useState, useCallback, useRef } from 'react';
 import { router } from '@inertiajs/react';
 import Button from '../UI/Button';
+import ChunkedFileUploader from './ChunkedFileUploader';
+
+// Files larger than 100MB use chunked upload
+const CHUNKED_UPLOAD_THRESHOLD = 100 * 1024 * 1024;
 
 export default function FileUploader({ folderId, onClose }) {
     const [files, setFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState({});
+    const [useChunked, setUseChunked] = useState(false);
     const inputRef = useRef(null);
 
     const handleDragOver = useCallback((e) => {
@@ -23,22 +28,42 @@ export default function FileUploader({ folderId, onClose }) {
         e.preventDefault();
         setIsDragging(false);
         const droppedFiles = Array.from(e.dataTransfer.files);
-        setFiles((prev) => [...prev, ...droppedFiles]);
+        processFiles(droppedFiles);
     }, []);
 
     const handleFileSelect = (e) => {
         const selectedFiles = Array.from(e.target.files);
-        setFiles((prev) => [...prev, ...selectedFiles]);
+        processFiles(selectedFiles);
+        e.target.value = '';
+    };
+
+    const processFiles = (newFiles) => {
+        // Check if any file is large enough to require chunked upload
+        const hasLargeFile = newFiles.some(f => f.size > CHUNKED_UPLOAD_THRESHOLD);
+
+        if (hasLargeFile) {
+            setUseChunked(true);
+            setFiles(prev => [...prev, ...newFiles]);
+        } else {
+            setFiles(prev => [...prev, ...newFiles]);
+        }
     };
 
     const removeFile = (index) => {
-        setFiles((prev) => prev.filter((_, i) => i !== index));
+        setFiles((prev) => {
+            const newFiles = prev.filter((_, i) => i !== index);
+            // If no more large files, switch back to simple upload
+            if (!newFiles.some(f => f.size > CHUNKED_UPLOAD_THRESHOLD)) {
+                setUseChunked(false);
+            }
+            return newFiles;
+        });
     };
 
     const formatFileSize = (bytes) => {
         if (bytes === 0) return '0 B';
         const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
@@ -71,6 +96,25 @@ export default function FileUploader({ folderId, onClose }) {
             },
         });
     };
+
+    const handleUploadComplete = () => {
+        router.reload({ only: ['files', 'stats'] });
+    };
+
+    // Use chunked uploader for large files
+    if (useChunked || files.some(f => f.size > CHUNKED_UPLOAD_THRESHOLD)) {
+        return (
+            <ChunkedFileUploader
+                folderId={folderId}
+                onClose={() => {
+                    setFiles([]);
+                    setUseChunked(false);
+                    onClose?.();
+                }}
+                onUploadComplete={handleUploadComplete}
+            />
+        );
+    }
 
     return (
         <div className="space-y-4">
@@ -110,7 +154,7 @@ export default function FileUploader({ folderId, onClose }) {
                         </p>
                     </div>
                     <p className="text-xs text-text-secondary">
-                        Maximum file size: 100MB
+                        Files up to 10GB supported (large files use chunked upload)
                     </p>
                 </div>
             </div>

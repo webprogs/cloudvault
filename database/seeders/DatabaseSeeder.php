@@ -25,9 +25,9 @@ class DatabaseSeeder extends Seeder
         // Create a regular test user
         User::create([
             'name' => 'Test User',
-            'username' => 'testuser',
-            'email' => 'user@cloudvault.local',
-            'password' => Hash::make('password123'),
+            'username' => 'user',
+            'email' => 'user@user.com',
+            'password' => Hash::make('user'),
             'role' => 'user',
         ]);
     }

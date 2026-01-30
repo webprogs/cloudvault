@@ -114,14 +114,82 @@ class FileSecurityService
 
     public function generateStoragePath(UploadedFile $file): string
     {
-        $hash = Str::random(40);
         $extension = strtolower($file->getClientOriginalExtension());
+        return $this->generateStoragePathFromExtension($extension);
+    }
+
+    public function generateStoragePathFromExtension(string $extension): string
+    {
+        $hash = Str::random(40);
+        $extension = strtolower($extension);
 
         // Organize by year/month for better file management
         // Store originals in files/originals/ directory
         $datePath = date('Y/m');
 
         return "files/originals/{$datePath}/{$hash}.{$extension}";
+    }
+
+    /**
+     * Validate a file by its path (for chunked uploads after assembly)
+     */
+    public function validateFileByPath(string $filePath, string $originalFilename, int $fileSize): array
+    {
+        $errors = [];
+
+        // Check extension
+        $extension = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
+        if (in_array($extension, $this->blockedExtensions)) {
+            $errors[] = "File type '.{$extension}' is not allowed for security reasons.";
+        }
+
+        // Check MIME type
+        $mimeType = mime_content_type($filePath);
+        if ($mimeType && in_array($mimeType, $this->blockedMimeTypes)) {
+            $errors[] = "File type '{$mimeType}' is not allowed for security reasons.";
+        }
+
+        // Double extension check
+        if ($this->hasDoubleExtension($originalFilename)) {
+            $errors[] = "Files with double extensions are not allowed.";
+        }
+
+        // Check file size
+        $maxSize = config('upload.max_file_size', 10737418240); // 10GB default
+        if ($fileSize > $maxSize) {
+            $errors[] = "File size exceeds the maximum allowed size of " . $this->formatBytes($maxSize) . ".";
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate filename and extension before upload session starts
+     */
+    public function validateFilenameForUpload(string $filename, int $fileSize): array
+    {
+        $errors = [];
+
+        // Check extension
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (empty($extension)) {
+            $errors[] = "File must have an extension.";
+        } elseif (in_array($extension, $this->blockedExtensions)) {
+            $errors[] = "File type '.{$extension}' is not allowed for security reasons.";
+        }
+
+        // Double extension check
+        if ($this->hasDoubleExtension($filename)) {
+            $errors[] = "Files with double extensions are not allowed.";
+        }
+
+        // Check file size
+        $maxSize = config('upload.max_file_size', 10737418240); // 10GB default
+        if ($fileSize > $maxSize) {
+            $errors[] = "File size exceeds the maximum allowed size of " . $this->formatBytes($maxSize) . ".";
+        }
+
+        return $errors;
     }
 
     protected function hasDoubleExtension(string $filename): bool

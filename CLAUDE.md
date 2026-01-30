@@ -45,7 +45,7 @@ npm run build
 
 ## Database
 
-SQLite by default. Three main models:
+MySql by default. Three main models:
 - **User** - has role field (admin check), hasMany files/folders
 - **Folder** - self-referential parent_id for nesting, belongsTo user
 - **File** - belongsTo user and folder, has search and filterByType scopes

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\FileShareController;
@@ -37,10 +38,20 @@ Route::middleware('auth')->group(function () {
     Route::post('/files/upload', [FileController::class, 'upload'])->name('files.upload');
     Route::get('/files/{file}/download', [FileController::class, 'download'])->name('files.download');
     Route::get('/files/{file}/thumbnail', [FileController::class, 'thumbnail'])->name('files.thumbnail');
+    Route::get('/files/{file}/processing-status', [FileController::class, 'processingStatus'])->name('files.processing-status');
     Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('files.destroy');
     Route::post('/files/bulk-delete', [FileController::class, 'bulkDelete'])->name('files.bulk-delete');
     Route::patch('/files/{file}/rename', [FileController::class, 'rename'])->name('files.rename');
     Route::patch('/files/{file}/move', [FileController::class, 'move'])->name('files.move');
+
+    // Chunked Uploads API
+    Route::prefix('api/uploads')->name('uploads.')->group(function () {
+        Route::get('/', [ChunkedUploadController::class, 'index'])->name('index');
+        Route::post('/initiate', [ChunkedUploadController::class, 'initiate'])->name('initiate');
+        Route::post('/{session}/chunk', [ChunkedUploadController::class, 'uploadChunk'])->name('chunk');
+        Route::get('/{session}/status', [ChunkedUploadController::class, 'status'])->name('status');
+        Route::delete('/{session}', [ChunkedUploadController::class, 'cancel'])->name('cancel');
+    });
 
     // Folders
     Route::post('/folders', [FolderController::class, 'store'])->name('folders.store');

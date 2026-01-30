@@ -16,6 +16,10 @@ class File extends Model
         'folder_id',
         'name',
         'storage_path',
+        'gcp_path',
+        'storage_disk',
+        'processing_status',
+        'upload_session_id',
         'thumbnail_path',
         'mime_type',
         'size',
@@ -25,6 +29,14 @@ class File extends Model
     protected $casts = [
         'size' => 'integer',
     ];
+
+    public const PROCESSING_PENDING = 'pending';
+    public const PROCESSING_PROCESSING = 'processing';
+    public const PROCESSING_COMPLETED = 'completed';
+    public const PROCESSING_FAILED = 'failed';
+
+    public const DISK_LOCAL = 'local';
+    public const DISK_GCS = 'gcs';
 
     protected $appends = ['formatted_size', 'icon_type', 'is_shared', 'thumbnail_url'];
 
@@ -41,6 +53,41 @@ class File extends Model
     public function shares(): HasMany
     {
         return $this->hasMany(FileShare::class);
+    }
+
+    public function processingLogs(): HasMany
+    {
+        return $this->hasMany(FileProcessingLog::class);
+    }
+
+    public function uploadSession(): BelongsTo
+    {
+        return $this->belongsTo(UploadSession::class);
+    }
+
+    public function isOnGcp(): bool
+    {
+        return $this->storage_disk === self::DISK_GCS && !empty($this->gcp_path);
+    }
+
+    public function isProcessing(): bool
+    {
+        return $this->processing_status === self::PROCESSING_PROCESSING;
+    }
+
+    public function isProcessingComplete(): bool
+    {
+        return $this->processing_status === self::PROCESSING_COMPLETED;
+    }
+
+    public function getStoragePath(): string
+    {
+        return $this->isOnGcp() ? $this->gcp_path : $this->storage_path;
+    }
+
+    public function getStorageDiskName(): string
+    {
+        return $this->storage_disk ?? self::DISK_LOCAL;
     }
 
     public function activeShare()
