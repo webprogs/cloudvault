@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CloudVault is a cloud file storage application built with Laravel 12 and React 19 via Inertia.js. It provides multi-user file management with hierarchical folders, file uploads with security validation, and an admin panel.
+Gray Media is a cloud file storage application built with Laravel 12 and React 19 via Inertia.js. It provides multi-user file management with hierarchical folders, file uploads with security validation, and an admin panel.
 
 ## Development Commands
 

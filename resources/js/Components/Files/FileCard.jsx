@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ShareIndicator from './ShareIndicator';
 
-export default function FileCard({ file, selected, onSelect, onContextMenu, onPreview, onDownload, onShare }) {
+export default function FileCard({ file, selected, onSelect, onContextMenu, onPreview, onDownload, onShare, onDragStart, onDragEnd }) {
     const [imageError, setImageError] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -80,8 +80,25 @@ export default function FileCard({ file, selected, onSelect, onContextMenu, onPr
         }
     };
 
+    const handleDragStart = (e) => {
+        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+        e.dataTransfer.effectAllowed = 'move';
+        if (onDragStart) {
+            onDragStart(file, 'file');
+        }
+    };
+
+    const handleDragEnd = () => {
+        if (onDragEnd) {
+            onDragEnd();
+        }
+    };
+
     return (
         <div
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
             className={`group relative bg-card border rounded-2xl p-4 transition-all duration-200 cursor-pointer card-hover ${
                 selected
                     ? 'border-primary ring-2 ring-primary/20 shadow-md'

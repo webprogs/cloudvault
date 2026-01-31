@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { router } from '@inertiajs/react';
 import ShareIndicator from './ShareIndicator';
 
@@ -12,7 +13,11 @@ export default function FileList({
     sortBy,
     sortOrder,
     onSort,
+    onDropToFolder,
+    selectedFolders,
+    onSelectFolder,
 }) {
+    const [dragOverFolderId, setDragOverFolderId] = useState(null);
     const handleSort = (column) => {
         onSort(column);
     };
@@ -93,19 +98,74 @@ export default function FileList({
                     {folders.map((folder) => (
                         <tr
                             key={`folder-${folder.id}`}
-                            className="hover:bg-gray-50/60 cursor-pointer transition-colors"
-                            onClick={() => onOpenFolder(folder.id)}
+                            draggable
+                            onDragStart={(e) => {
+                                e.dataTransfer.setData('application/json', JSON.stringify({ type: 'folder', id: folder.id }));
+                                e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                            }}
+                            onDragEnter={(e) => {
+                                e.preventDefault();
+                                setDragOverFolderId(folder.id);
+                            }}
+                            onDragLeave={(e) => {
+                                if (!e.currentTarget.contains(e.relatedTarget)) {
+                                    setDragOverFolderId(null);
+                                }
+                            }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                setDragOverFolderId(null);
+                                try {
+                                    const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                                    if (data.type === 'folder' && data.id === folder.id) return;
+                                    if (onDropToFolder) {
+                                        onDropToFolder(data.id, data.type, folder.id);
+                                    }
+                                } catch (error) {
+                                    console.error('Drop error:', error);
+                                }
+                            }}
+                            className={`cursor-pointer transition-colors ${
+                                dragOverFolderId === folder.id
+                                    ? 'bg-primary-light/50 ring-2 ring-primary/40'
+                                    : selectedFolders?.includes(folder.id)
+                                    ? 'bg-primary-light/30'
+                                    : 'hover:bg-gray-50/60'
+                            }`}
+                            onClick={(e) => {
+                                if (e.ctrlKey || e.metaKey) {
+                                    if (onSelectFolder) {
+                                        onSelectFolder(folder.id);
+                                    }
+                                } else {
+                                    onOpenFolder(folder.id);
+                                }
+                            }}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 onFolderContextMenu(e, folder);
                             }}
                         >
                             <td className="px-4 py-4">
-                                <div className="w-5" />
+                                {onSelectFolder ? (
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded-md border-border cursor-pointer"
+                                        checked={selectedFolders?.includes(folder.id)}
+                                        onChange={() => onSelectFolder(folder.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                ) : (
+                                    <div className="w-5" />
+                                )}
                             </td>
                             <td className="px-4 py-4">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-blue-100 flex items-center justify-center shrink-0">
+                                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-blue-100 flex items-center justify-center shrink-0 transition-transform ${dragOverFolderId === folder.id ? 'scale-110' : ''}`}>
                                         <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                                         </svg>
@@ -139,6 +199,11 @@ export default function FileList({
                     {files.map((file) => (
                         <tr
                             key={`file-${file.id}`}
+                            draggable
+                            onDragStart={(e) => {
+                                e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                                e.dataTransfer.effectAllowed = 'move';
+                            }}
                             className={`hover:bg-gray-50/60 transition-colors ${selectedFiles.includes(file.id) ? 'bg-primary-light/30' : ''}`}
                             onContextMenu={(e) => {
                                 e.preventDefault();

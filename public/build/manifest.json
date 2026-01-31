@@ -1,27 +1,27 @@
 {
-  "_AppLayout-BnFOcWJR.js": {
-    "file": "assets/AppLayout-BnFOcWJR.js",
+  "_AppLayout-BFK8zi9d.js": {
+    "file": "assets/AppLayout-BFK8zi9d.js",
     "name": "AppLayout",
     "imports": [
       "resources/js/app.jsx"
     ]
   },
-  "_Button-CGE1DzVd.js": {
-    "file": "assets/Button-CGE1DzVd.js",
+  "_Button-VU0GipWi.js": {
+    "file": "assets/Button-VU0GipWi.js",
     "name": "Button",
     "imports": [
       "resources/js/app.jsx"
     ]
   },
-  "_Modal-t-7ADvTk.js": {
-    "file": "assets/Modal-t-7ADvTk.js",
+  "_Modal-CRolMPXu.js": {
+    "file": "assets/Modal-CRolMPXu.js",
     "name": "Modal",
     "imports": [
       "resources/js/app.jsx"
     ]
   },
   "resources/css/app.css": {
-    "file": "assets/app-Bs2xAVlM.css",
+    "file": "assets/app-BNOJmuAA.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -30,115 +30,115 @@
     ]
   },
   "resources/js/Pages/Admin/CreateUser.jsx": {
-    "file": "assets/CreateUser-C47Gntms.js",
+    "file": "assets/CreateUser-CF8xvJU2.js",
     "name": "CreateUser",
     "src": "resources/js/Pages/Admin/CreateUser.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js",
-      "_Button-CGE1DzVd.js"
+      "_AppLayout-BFK8zi9d.js",
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Admin/Users.jsx": {
-    "file": "assets/Users-DsOaXGrN.js",
+    "file": "assets/Users-BzzP3k_o.js",
     "name": "Users",
     "src": "resources/js/Pages/Admin/Users.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js",
-      "_Button-CGE1DzVd.js",
-      "_Modal-t-7ADvTk.js"
+      "_AppLayout-BFK8zi9d.js",
+      "_Button-VU0GipWi.js",
+      "_Modal-CRolMPXu.js"
     ]
   },
   "resources/js/Pages/Auth/ChangePassword.jsx": {
-    "file": "assets/ChangePassword-B_oKc-yz.js",
+    "file": "assets/ChangePassword-DQN_BsqZ.js",
     "name": "ChangePassword",
     "src": "resources/js/Pages/Auth/ChangePassword.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js",
-      "_Button-CGE1DzVd.js"
+      "_AppLayout-BFK8zi9d.js",
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Auth/Login.jsx": {
-    "file": "assets/Login-XsaaJxig.js",
+    "file": "assets/Login-BRqfQPcB.js",
     "name": "Login",
     "src": "resources/js/Pages/Auth/Login.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_Button-CGE1DzVd.js"
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Dashboard.jsx": {
-    "file": "assets/Dashboard-PVDxbnbQ.js",
+    "file": "assets/Dashboard-CAdO4hFm.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js"
+      "_AppLayout-BFK8zi9d.js"
     ]
   },
   "resources/js/Pages/Files/Index.jsx": {
-    "file": "assets/Index-C-mjBtCE.js",
+    "file": "assets/Index-Dbmt-LP_.js",
     "name": "Index",
     "src": "resources/js/Pages/Files/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js",
-      "_Button-CGE1DzVd.js",
-      "_Modal-t-7ADvTk.js"
+      "_AppLayout-BFK8zi9d.js",
+      "_Button-VU0GipWi.js",
+      "_Modal-CRolMPXu.js"
     ]
   },
   "resources/js/Pages/Share/Download.jsx": {
-    "file": "assets/Download-BIkdhfCr.js",
+    "file": "assets/Download-BmP7pajP.js",
     "name": "Download",
     "src": "resources/js/Pages/Share/Download.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_Button-CGE1DzVd.js"
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Share/Expired.jsx": {
-    "file": "assets/Expired-BJecjVMj.js",
+    "file": "assets/Expired-x0TfREtn.js",
     "name": "Expired",
     "src": "resources/js/Pages/Share/Expired.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_Button-CGE1DzVd.js"
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Share/PasswordPrompt.jsx": {
-    "file": "assets/PasswordPrompt-B8dGQN32.js",
+    "file": "assets/PasswordPrompt-DksH2KP_.js",
     "name": "PasswordPrompt",
     "src": "resources/js/Pages/Share/PasswordPrompt.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_Button-CGE1DzVd.js"
+      "_Button-VU0GipWi.js"
     ]
   },
   "resources/js/Pages/Shares/Index.jsx": {
-    "file": "assets/Index-tMCYzj3_.js",
+    "file": "assets/Index-puLv8_n8.js",
     "name": "Index",
     "src": "resources/js/Pages/Shares/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AppLayout-BnFOcWJR.js",
-      "_Button-CGE1DzVd.js",
-      "_Modal-t-7ADvTk.js"
+      "_AppLayout-BFK8zi9d.js",
+      "_Button-VU0GipWi.js",
+      "_Modal-CRolMPXu.js"
     ]
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-SoRLWay0.js",
+    "file": "assets/app-Dmf9EGBP.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,

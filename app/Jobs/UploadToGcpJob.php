@@ -99,7 +99,7 @@ class UploadToGcpJob implements ShouldQueue
 
     protected function generateGcpPath(): string
     {
-        $prefix = config('filesystems.disks.gcs.path_prefix', 'cloudvault');
+        $prefix = config('filesystems.disks.gcs.path_prefix', 'graymedia');
         $date = now();
 
         return sprintf(
@@ -117,7 +117,7 @@ class UploadToGcpJob implements ShouldQueue
         try {
             $thumbnailGcpPath = str_replace(
                 'files/',
-                config('filesystems.disks.gcs.path_prefix', 'cloudvault') . '/thumbnails/',
+                config('filesystems.disks.gcs.path_prefix', 'graymedia') . '/thumbnails/',
                 $this->file->thumbnail_path
             );
 

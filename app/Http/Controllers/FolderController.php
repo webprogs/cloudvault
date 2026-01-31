@@ -3,11 +3,83 @@
 namespace App\Http\Controllers;
 
 use App\Models\Folder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class FolderController extends Controller
 {
+    public function tree(): JsonResponse
+    {
+        $folders = Folder::where('user_id', auth()->id())
+            ->with('children')
+            ->whereNull('parent_id')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json(['folders' => $this->buildTree($folders)]);
+    }
+
+    protected function buildTree($folders): array
+    {
+        return $folders->map(function ($folder) {
+            return [
+                'id' => $folder->id,
+                'name' => $folder->name,
+                'children' => $this->buildTree($folder->children),
+            ];
+        })->toArray();
+    }
+
+    public function group(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'folder_ids' => ['required', 'array', 'min:2'],
+            'folder_ids.*' => ['integer', 'exists:folders,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'parent_id' => ['nullable', 'integer', 'exists:folders,id'],
+        ]);
+
+        // Verify ownership of all folders
+        $folders = Folder::where('user_id', auth()->id())
+            ->whereIn('id', $validated['folder_ids'])
+            ->get();
+
+        if ($folders->count() !== count($validated['folder_ids'])) {
+            return back()->with('error', 'Some folders could not be found.');
+        }
+
+        // Verify parent folder ownership if specified
+        if ($validated['parent_id']) {
+            Folder::where('user_id', auth()->id())->findOrFail($validated['parent_id']);
+        }
+
+        // Check for duplicate folder name in target directory
+        $exists = Folder::where('user_id', auth()->id())
+            ->where('parent_id', $validated['parent_id'])
+            ->where('name', $validated['name'])
+            ->exists();
+
+        if ($exists) {
+            return back()->with('error', 'A folder with this name already exists.');
+        }
+
+        // Create the parent folder
+        $parentFolder = Folder::create([
+            'user_id' => auth()->id(),
+            'parent_id' => $validated['parent_id'],
+            'name' => $validated['name'],
+        ]);
+
+        // Move all selected folders into the new parent
+        foreach ($folders as $folder) {
+            $folder->update(['parent_id' => $parentFolder->id]);
+        }
+
+        return back()->with('success', 'Folders grouped successfully.');
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

@@ -8,6 +8,8 @@ import FileUploader from '../../Components/Files/FileUploader';
 import FileContextMenu from '../../Components/Files/FileContextMenu';
 import ShareModal from '../../Components/Files/ShareModal';
 import MediaPreview from '../../Components/Files/MediaPreview';
+import MoveModal from '../../Components/Files/MoveModal';
+import GroupFoldersModal from '../../Components/Files/GroupFoldersModal';
 import Modal from '../../Components/UI/Modal';
 import Button from '../../Components/UI/Button';
 import useFileSort from '../../Hooks/useFileSort';
@@ -33,8 +35,14 @@ export default function FilesIndex({
     const [contextMenu, setContextMenu] = useState(null);
     const [folderContextMenu, setFolderContextMenu] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
+    const [deleteItem, setDeleteItem] = useState(null);
     const [newFolderName, setNewFolderName] = useState('');
     const [renameName, setRenameName] = useState('');
+    const [showMoveModal, setShowMoveModal] = useState(false);
+    const [moveItem, setMoveItem] = useState(null);
+    const [moveItemType, setMoveItemType] = useState(null);
+    const [selectedFolders, setSelectedFolders] = useState([]);
+    const [showGroupModal, setShowGroupModal] = useState(false);
 
     const { sortBy, sortOrder, handleSort } = useFileSort(
         filters.sort_by || 'created_at',
@@ -84,13 +92,65 @@ export default function FilesIndex({
     };
 
     const handleDelete = (item) => {
-        setSelectedItem(item);
+        setDeleteItem(item);
         setShowDeleteModal(true);
     };
 
-    const handleMove = (file) => {
-        // For simplicity, move to root
-        router.patch(`/files/${file.id}/move`, { folder_id: null });
+    const handleMove = (item, isFolder = false) => {
+        setMoveItem(item);
+        setMoveItemType(isFolder ? 'folder' : 'file');
+        setShowMoveModal(true);
+    };
+
+    const submitMove = (itemId, itemType, targetFolderId) => {
+        return new Promise((resolve, reject) => {
+            const url = itemType === 'file'
+                ? `/files/${itemId}/move`
+                : `/folders/${itemId}/move`;
+            const payload = itemType === 'file'
+                ? { folder_id: targetFolderId }
+                : { parent_id: targetFolderId };
+
+            router.patch(url, payload, {
+                onSuccess: () => resolve(),
+                onError: (errors) => reject(errors),
+            });
+        });
+    };
+
+    const handleDropToFolder = (itemId, itemType, targetFolderId) => {
+        const url = itemType === 'file'
+            ? `/files/${itemId}/move`
+            : `/folders/${itemId}/move`;
+        const payload = itemType === 'file'
+            ? { folder_id: targetFolderId }
+            : { parent_id: targetFolderId };
+
+        router.patch(url, payload);
+    };
+
+    const handleSelectFolder = useCallback((folderId) => {
+        setSelectedFolders((prev) =>
+            prev.includes(folderId)
+                ? prev.filter((id) => id !== folderId)
+                : [...prev, folderId]
+        );
+    }, []);
+
+    const submitGroupFolders = (name) => {
+        return new Promise((resolve, reject) => {
+            router.post('/folders/group', {
+                folder_ids: selectedFolders,
+                name,
+                parent_id: currentFolder?.id || null,
+            }, {
+                onSuccess: () => {
+                    setSelectedFolders([]);
+                    resolve();
+                },
+                onError: (errors) => reject(errors),
+            });
+        });
     };
 
     const handleShare = async (file) => {
@@ -146,15 +206,17 @@ export default function FilesIndex({
     };
 
     const submitDelete = () => {
-        const isFolder = !selectedItem.extension;
+        if (!deleteItem) return;
+
+        const isFolder = !deleteItem.extension;
         const url = isFolder
-            ? `/folders/${selectedItem.id}`
-            : `/files/${selectedItem.id}`;
+            ? `/folders/${deleteItem.id}`
+            : `/files/${deleteItem.id}`;
 
         router.delete(url, {
             onSuccess: () => {
                 setShowDeleteModal(false);
-                setSelectedItem(null);
+                setDeleteItem(null);
             },
         });
     };
@@ -199,6 +261,14 @@ export default function FilesIndex({
                         {selectedFiles.length > 0 && (
                             <Button variant="danger" onClick={handleBulkDelete}>
                                 Delete ({selectedFiles.length})
+                            </Button>
+                        )}
+                        {selectedFolders.length >= 2 && (
+                            <Button variant="secondary" onClick={() => setShowGroupModal(true)}>
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                                Group ({selectedFolders.length})
                             </Button>
                         )}
                     </div>
@@ -290,6 +360,9 @@ export default function FilesIndex({
                         onPreview={handlePreview}
                         onDownload={handleDownload}
                         onShare={handleShare}
+                        onDropToFolder={handleDropToFolder}
+                        selectedFolders={selectedFolders}
+                        onSelectFolder={handleSelectFolder}
                     />
                 ) : (
                     <FileList
@@ -303,6 +376,9 @@ export default function FilesIndex({
                         sortBy={sortBy}
                         sortOrder={sortOrder}
                         onSort={handleSort}
+                        onDropToFolder={handleDropToFolder}
+                        selectedFolders={selectedFolders}
+                        onSelectFolder={handleSelectFolder}
                     />
                 )}
 
@@ -404,13 +480,16 @@ export default function FilesIndex({
             {/* Delete Confirmation Modal */}
             <Modal
                 isOpen={showDeleteModal}
-                onClose={() => setShowDeleteModal(false)}
-                title={`Delete ${selectedItem?.extension ? 'File' : 'Folder'}`}
+                onClose={() => {
+                    setShowDeleteModal(false);
+                    setDeleteItem(null);
+                }}
+                title={`Delete ${deleteItem?.extension ? 'File' : 'Folder'}`}
             >
                 <div className="space-y-4">
                     <p className="text-text-secondary">
-                        Are you sure you want to delete <strong>{selectedItem?.name}</strong>?
-                        {!selectedItem?.extension && ' All files inside will also be deleted.'}
+                        Are you sure you want to delete <strong>{deleteItem?.name}</strong>?
+                        {!deleteItem?.extension && ' All files inside will also be deleted.'}
                         This action cannot be undone.
                     </p>
                     <div className="flex justify-end gap-3">
@@ -494,6 +573,19 @@ export default function FilesIndex({
                         </svg>
                         Rename
                     </button>
+                    <button
+                        onClick={() => {
+                            handleMove(selectedItem, true);
+                            setFolderContextMenu(null);
+                            setSelectedItem(null);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-gray-50 flex items-center gap-3"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        Move to...
+                    </button>
                     <div className="my-1 border-t border-border" />
                     <button
                         onClick={() => {
@@ -520,6 +612,28 @@ export default function FilesIndex({
                     }}
                 />
             )}
+
+            {/* Move Modal */}
+            <MoveModal
+                isOpen={showMoveModal}
+                onClose={() => {
+                    setShowMoveModal(false);
+                    setMoveItem(null);
+                    setMoveItemType(null);
+                }}
+                item={moveItem}
+                itemType={moveItemType}
+                onMove={submitMove}
+                currentFolderId={moveItemType === 'file' ? moveItem?.folder_id : moveItem?.parent_id}
+            />
+
+            {/* Group Folders Modal */}
+            <GroupFoldersModal
+                isOpen={showGroupModal}
+                onClose={() => setShowGroupModal(false)}
+                selectedFolders={folders.filter((f) => selectedFolders.includes(f.id))}
+                onSubmit={submitGroupFolders}
+            />
         </AppLayout>
     );
 }

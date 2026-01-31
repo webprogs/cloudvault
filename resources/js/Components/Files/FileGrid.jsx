@@ -12,6 +12,9 @@ export default function FileGrid({
     onPreview,
     onDownload,
     onShare,
+    onDropToFolder,
+    selectedFolders,
+    onSelectFolder,
 }) {
     if (files.length === 0 && folders.length === 0) {
         return (
@@ -40,6 +43,10 @@ export default function FileGrid({
                                 folder={folder}
                                 onOpen={() => onOpenFolder(folder.id)}
                                 onContextMenu={onFolderContextMenu}
+                                onDrop={onDropToFolder}
+                                selected={selectedFolders?.includes(folder.id)}
+                                onSelect={onSelectFolder}
+                                selectable={!!onSelectFolder}
                             />
                         ))}
                     </div>

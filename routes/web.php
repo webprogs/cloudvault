@@ -54,6 +54,8 @@ Route::middleware('auth')->group(function () {
     });
 
     // Folders
+    Route::get('/folders/tree', [FolderController::class, 'tree'])->name('folders.tree');
+    Route::post('/folders/group', [FolderController::class, 'group'])->name('folders.group');
     Route::post('/folders', [FolderController::class, 'store'])->name('folders.store');
     Route::patch('/folders/{folder}', [FolderController::class, 'update'])->name('folders.update');
     Route::delete('/folders/{folder}', [FolderController::class, 'destroy'])->name('folders.destroy');

@@ -154,7 +154,7 @@ class MigrateFilesToGcp extends Command
 
     protected function generateGcpPath(File $file): string
     {
-        $prefix = config('filesystems.disks.gcs.path_prefix', 'cloudvault');
+        $prefix = config('filesystems.disks.gcs.path_prefix', 'graymedia');
 
         return sprintf(
             '%s/files/%s/%s/%s.%s',
@@ -171,7 +171,7 @@ class MigrateFilesToGcp extends Command
         try {
             $thumbnailGcpPath = str_replace(
                 'files/',
-                config('filesystems.disks.gcs.path_prefix', 'cloudvault') . '/thumbnails/',
+                config('filesystems.disks.gcs.path_prefix', 'graymedia') . '/thumbnails/',
                 $file->thumbnail_path
             );
 

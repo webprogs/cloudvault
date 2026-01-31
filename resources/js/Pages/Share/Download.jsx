@@ -64,7 +64,7 @@ export default function Download({ token, file }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
                         </div>
-                        <span className="text-2xl font-bold text-primary-dark">CloudVault</span>
+                        <span className="text-2xl font-bold text-primary-dark">Gray Media</span>
                     </div>
 
                     <div className="bg-card rounded-2xl shadow-xl shadow-black/5 border border-border overflow-hidden">
@@ -94,7 +94,7 @@ export default function Download({ token, file }) {
                     </div>
 
                     <p className="text-center text-sm text-text-secondary mt-6">
-                        Shared via CloudVault
+                        Shared via Gray Media
                     </p>
                 </div>
             </div>
