@@ -9,6 +9,7 @@ use App\Services\FileSecurityService;
 use App\Services\ThumbnailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\JsonResponse;
@@ -89,6 +90,7 @@ class FileController extends Controller
         $folderId = $request->input('folder_id');
         $uploadedFiles = [];
         $errors = [];
+        $useGcp = config('upload.use_gcp', false);
 
         foreach ($request->file('files') as $file) {
             // Security validation
@@ -98,47 +100,118 @@ class FileController extends Controller
                 continue;
             }
 
-            // Generate storage path
-            $storagePath = $this->securityService->generateStoragePath($file);
-
-            // Store file
-            $file->storeAs(
-                dirname($storagePath),
-                basename($storagePath)
-            );
-
-            // Create database record
-            $fileRecord = File::create([
-                'user_id' => $user->id,
-                'folder_id' => $folderId,
-                'name' => $this->securityService->sanitizeFilename($file->getClientOriginalName()),
-                'storage_path' => $storagePath,
-                'mime_type' => $file->getMimeType(),
-                'size' => $file->getSize(),
-                'extension' => strtolower($file->getClientOriginalExtension()),
-            ]);
-
-            // Generate thumbnail for images
-            if ($this->thumbnailService->isImageFile($file->getMimeType())) {
-                $thumbnailPath = $this->thumbnailService->getThumbnailPath($storagePath);
-                // Use .jpg extension for thumbnails
-                $thumbnailPath = preg_replace('/\.[^.]+$/', '.jpg', $thumbnailPath);
-                $this->thumbnailService->generateThumbnail($storagePath, $thumbnailPath);
-
-                // Store thumbnail path in the file record
-                $fileRecord->update(['thumbnail_path' => $thumbnailPath]);
+            try {
+                if ($useGcp) {
+                    $fileRecord = $this->uploadToGcp($file, $user, $folderId);
+                } else {
+                    $fileRecord = $this->uploadToLocal($file, $user, $folderId);
+                }
+                $uploadedFiles[] = $fileRecord;
+            } catch (\Throwable $e) {
+                report($e);
+                $errors[$file->getClientOriginalName()] = ['Upload failed: ' . $e->getMessage()];
             }
-
-            $uploadedFiles[] = $fileRecord;
         }
 
         if (!empty($errors)) {
-            return back()->with('error', 'Some files could not be uploaded due to security restrictions.')
+            return back()->with('error', 'Some files could not be uploaded.')
                 ->with('upload_errors', $errors);
         }
 
         $count = count($uploadedFiles);
         return back()->with('success', "{$count} file(s) uploaded successfully.");
+    }
+
+    protected function uploadToGcp($file, $user, $folderId): File
+    {
+        $date = now();
+        $extension = strtolower($file->getClientOriginalExtension());
+        $gcpPath = sprintf(
+            'files/%s/%s/%s.%s',
+            $date->format('Y'),
+            $date->format('m'),
+            Str::random(40),
+            $extension
+        );
+
+        // Stream upload directly to GCP
+        $stream = fopen($file->getRealPath(), 'r');
+        Storage::disk('gcs')->writeStream($gcpPath, $stream);
+        if (is_resource($stream)) {
+            fclose($stream);
+        }
+
+        // Create database record
+        $fileRecord = File::create([
+            'user_id' => $user->id,
+            'folder_id' => $folderId,
+            'name' => $this->securityService->sanitizeFilename($file->getClientOriginalName()),
+            'storage_path' => null,
+            'gcp_path' => $gcpPath,
+            'storage_disk' => File::DISK_GCS,
+            'processing_status' => File::PROCESSING_COMPLETED,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'extension' => $extension,
+        ]);
+
+        // Generate and upload thumbnail for images
+        if ($this->thumbnailService->isImageFile($file->getMimeType())) {
+            $thumbnailGcpPath = $this->uploadThumbnailToGcp($file, $gcpPath);
+            if ($thumbnailGcpPath) {
+                $fileRecord->update(['thumbnail_path' => $thumbnailGcpPath]);
+            }
+        }
+
+        return $fileRecord;
+    }
+
+    protected function uploadThumbnailToGcp($file, string $originalGcpPath): ?string
+    {
+        try {
+            $thumbnailGcpPath = str_replace('files/', 'thumbnails/', $originalGcpPath);
+            $thumbnailGcpPath = preg_replace('/\.[^.]+$/', '.jpg', $thumbnailGcpPath);
+
+            $thumbnailData = $this->thumbnailService->generateThumbnailFromPath($file->getRealPath());
+            if ($thumbnailData) {
+                Storage::disk('gcs')->put($thumbnailGcpPath, $thumbnailData);
+                return $thumbnailGcpPath;
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        return null;
+    }
+
+    protected function uploadToLocal($file, $user, $folderId): File
+    {
+        $storagePath = $this->securityService->generateStoragePath($file);
+
+        $file->storeAs(
+            dirname($storagePath),
+            basename($storagePath)
+        );
+
+        $fileRecord = File::create([
+            'user_id' => $user->id,
+            'folder_id' => $folderId,
+            'name' => $this->securityService->sanitizeFilename($file->getClientOriginalName()),
+            'storage_path' => $storagePath,
+            'storage_disk' => File::DISK_LOCAL,
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'extension' => strtolower($file->getClientOriginalExtension()),
+        ]);
+
+        // Generate thumbnail for images
+        if ($this->thumbnailService->isImageFile($file->getMimeType())) {
+            $thumbnailPath = $this->thumbnailService->getThumbnailPath($storagePath);
+            $thumbnailPath = preg_replace('/\.[^.]+$/', '.jpg', $thumbnailPath);
+            $this->thumbnailService->generateThumbnail($storagePath, $thumbnailPath);
+            $fileRecord->update(['thumbnail_path' => $thumbnailPath]);
+        }
+
+        return $fileRecord;
     }
 
     public function download(File $file): StreamedResponse|RedirectResponse
@@ -148,28 +221,22 @@ class FileController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        // If file is on GCP, redirect to signed URL
+        // If file is on GCP, stream from GCP with download headers
         if ($file->isOnGcp()) {
-            try {
-                $url = Storage::disk('gcs')->temporaryUrl(
-                    $file->gcp_path,
-                    now()->addMinutes(15),
-                    [
-                        'ResponseContentDisposition' => 'attachment; filename="' . $file->name . '"',
-                    ]
-                );
-                return redirect($url);
-            } catch (\Throwable $e) {
-                // If GCS fails, try local fallback
-                if (Storage::disk('local')->exists($file->storage_path)) {
-                    return Storage::disk('local')->download($file->storage_path, $file->name);
+            return response()->streamDownload(function () use ($file) {
+                $stream = Storage::disk('gcs')->readStream($file->gcp_path);
+                fpassthru($stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
                 }
-                abort(404, 'File not found');
-            }
+            }, $file->name, [
+                'Content-Type' => $file->mime_type,
+                'Content-Length' => $file->size,
+            ]);
         }
 
         // Local file download
-        if (!Storage::disk('local')->exists($file->storage_path)) {
+        if (!$file->storage_path || !Storage::disk('local')->exists($file->storage_path)) {
             abort(404, 'File not found');
         }
 
@@ -209,31 +276,48 @@ class FileController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        // Try to get thumbnail path
         $thumbnailPath = $file->thumbnail_path;
 
-        // If no stored thumbnail path, try to compute it
+        // If file is on GCP
+        if ($file->isOnGcp()) {
+            if ($thumbnailPath) {
+                try {
+                    $url = Storage::disk('gcs')->temporaryUrl($thumbnailPath, now()->addHour());
+                    return redirect($url);
+                } catch (\Throwable $e) {
+                    // Fall through to serve original
+                }
+            }
+            // Redirect to original on GCP if no thumbnail
+            try {
+                $url = Storage::disk('gcs')->temporaryUrl($file->gcp_path, now()->addHour());
+                return redirect($url);
+            } catch (\Throwable $e) {
+                abort(404, 'File not found');
+            }
+        }
+
+        // Local file handling
         if (!$thumbnailPath) {
             $thumbnailPath = $this->thumbnailService->getExistingThumbnailPath($file->storage_path);
         }
 
-        // If thumbnail exists, serve it
-        if ($thumbnailPath && Storage::exists($thumbnailPath)) {
-            return response()->file(Storage::path($thumbnailPath), [
+        if ($thumbnailPath && Storage::disk('local')->exists($thumbnailPath)) {
+            return response()->file(Storage::disk('local')->path($thumbnailPath), [
                 'Content-Type' => 'image/jpeg',
                 'Cache-Control' => 'public, max-age=31536000',
             ]);
         }
 
         // Generate thumbnail on-the-fly if it doesn't exist
-        if ($this->thumbnailService->isImageFile($file->mime_type)) {
+        if ($this->thumbnailService->isImageFile($file->mime_type) && $file->storage_path) {
             $newThumbnailPath = $this->thumbnailService->getThumbnailPath($file->storage_path);
             $newThumbnailPath = preg_replace('/\.[^.]+$/', '.jpg', $newThumbnailPath);
 
             if ($this->thumbnailService->generateThumbnail($file->storage_path, $newThumbnailPath)) {
                 $file->update(['thumbnail_path' => $newThumbnailPath]);
 
-                return response()->file(Storage::path($newThumbnailPath), [
+                return response()->file(Storage::disk('local')->path($newThumbnailPath), [
                     'Content-Type' => 'image/jpeg',
                     'Cache-Control' => 'public, max-age=31536000',
                 ]);
@@ -241,8 +325,8 @@ class FileController extends Controller
         }
 
         // Fallback: serve original file
-        if (Storage::exists($file->storage_path)) {
-            return response()->file(Storage::path($file->storage_path), [
+        if ($file->storage_path && Storage::disk('local')->exists($file->storage_path)) {
+            return response()->file(Storage::disk('local')->path($file->storage_path), [
                 'Content-Type' => $file->mime_type,
             ]);
         }
@@ -261,6 +345,10 @@ class FileController extends Controller
         if ($file->isOnGcp()) {
             try {
                 Storage::disk('gcs')->delete($file->gcp_path);
+                // Delete GCP thumbnail if exists
+                if ($file->thumbnail_path && str_starts_with($file->thumbnail_path, 'thumbnails/')) {
+                    Storage::disk('gcs')->delete($file->thumbnail_path);
+                }
             } catch (\Throwable $e) {
                 // Log but continue - file may already be deleted
             }
@@ -269,11 +357,11 @@ class FileController extends Controller
         // Delete from local storage
         if ($file->storage_path && Storage::disk('local')->exists($file->storage_path)) {
             Storage::disk('local')->delete($file->storage_path);
+            $this->thumbnailService->deleteThumbnail($file->storage_path);
         }
 
-        // Delete thumbnail if exists
-        $this->thumbnailService->deleteThumbnail($file->storage_path);
-        if ($file->thumbnail_path) {
+        // Delete local thumbnail if exists
+        if ($file->thumbnail_path && Storage::disk('local')->exists($file->thumbnail_path)) {
             Storage::disk('local')->delete($file->thumbnail_path);
         }
 
@@ -299,6 +387,9 @@ class FileController extends Controller
             if ($file->isOnGcp()) {
                 try {
                     Storage::disk('gcs')->delete($file->gcp_path);
+                    if ($file->thumbnail_path && str_starts_with($file->thumbnail_path, 'thumbnails/')) {
+                        Storage::disk('gcs')->delete($file->thumbnail_path);
+                    }
                 } catch (\Throwable $e) {
                     // Log but continue - file may already be deleted
                 }
@@ -307,13 +398,14 @@ class FileController extends Controller
             // Delete from local storage
             if ($file->storage_path && Storage::disk('local')->exists($file->storage_path)) {
                 Storage::disk('local')->delete($file->storage_path);
+                $this->thumbnailService->deleteThumbnail($file->storage_path);
             }
 
-            // Delete thumbnail if exists
-            $this->thumbnailService->deleteThumbnail($file->storage_path);
-            if ($file->thumbnail_path) {
+            // Delete local thumbnail if exists
+            if ($file->thumbnail_path && Storage::disk('local')->exists($file->thumbnail_path)) {
                 Storage::disk('local')->delete($file->thumbnail_path);
             }
+
             $file->delete();
         }
 

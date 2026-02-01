@@ -108,7 +108,7 @@ export default function MediaPreview({ file, onClose, onDownload, onShare }) {
 
                 {isImage && (
                     <img
-                        src={`/files/${file.id}/download`}
+                        src={file.preview_url || `/files/${file.id}/download`}
                         alt={file.name}
                         className={`max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
                         onLoad={handleLoad}
@@ -118,7 +118,7 @@ export default function MediaPreview({ file, onClose, onDownload, onShare }) {
 
                 {isVideo && (
                     <video
-                        src={`/files/${file.id}/download`}
+                        src={file.preview_url || `/files/${file.id}/download`}
                         controls
                         autoPlay
                         className={`max-w-full max-h-[85vh] rounded-lg shadow-2xl ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}

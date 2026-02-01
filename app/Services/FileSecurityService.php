@@ -7,82 +7,14 @@ use Illuminate\Support\Str;
 
 class FileSecurityService
 {
-    protected array $blockedExtensions = [
-        // Executables
-        'exe', 'bat', 'cmd', 'msi', 'com', 'scr', 'pif', 'gadget',
-        // Scripts
-        'php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'phps',
-        'sh', 'bash', 'zsh', 'csh', 'ksh',
-        'ps1', 'psm1', 'psd1',
-        'py', 'pyc', 'pyo', 'pyw',
-        'rb', 'rbw',
-        'pl', 'pm', 'cgi',
-        'vbs', 'vbe', 'wsf', 'wsh',
-        // Web
-        'html', 'htm', 'xhtml',
-        'js', 'mjs', 'jsx', 'ts', 'tsx',
-        'jsp', 'jspx',
-        'asp', 'aspx', 'ascx', 'ashx', 'asmx',
-        'cfm', 'cfc',
-        // Other dangerous
-        'jar', 'war', 'ear',
-        'dll', 'so', 'dylib',
-        'sys', 'drv',
-        'reg', 'inf',
-        'hta', 'htaccess',
-        'shtml', 'shtm',
-    ];
-
-    protected array $blockedMimeTypes = [
-        'application/x-executable',
-        'application/x-msdos-program',
-        'application/x-msdownload',
-        'application/x-sh',
-        'application/x-shellscript',
-        'application/x-php',
-        'application/x-httpd-php',
-        'application/x-perl',
-        'application/x-python',
-        'application/x-ruby',
-        'text/x-php',
-        'text/x-perl',
-        'text/x-python',
-        'text/x-shellscript',
-        'text/html',
-        'text/javascript',
-        'application/javascript',
-        'application/x-javascript',
-    ];
+    // No file type restrictions - this is a file storage system
+    protected array $blockedExtensions = [];
+    protected array $blockedMimeTypes = [];
 
     public function validateFile(UploadedFile $file): array
     {
-        $errors = [];
-
-        // Check extension
-        $extension = strtolower($file->getClientOriginalExtension());
-        if (in_array($extension, $this->blockedExtensions)) {
-            $errors[] = "File type '.{$extension}' is not allowed for security reasons.";
-        }
-
-        // Check MIME type
-        $mimeType = $file->getMimeType();
-        if (in_array($mimeType, $this->blockedMimeTypes)) {
-            $errors[] = "File type '{$mimeType}' is not allowed for security reasons.";
-        }
-
-        // Double extension check (e.g., file.php.jpg)
-        $filename = $file->getClientOriginalName();
-        if ($this->hasDoubleExtension($filename)) {
-            $errors[] = "Files with double extensions are not allowed.";
-        }
-
-        // Check file size
-        $maxSize = config('filesystems.max_upload_size', 104857600); // 100MB default
-        if ($file->getSize() > $maxSize) {
-            $errors[] = "File size exceeds the maximum allowed size of " . $this->formatBytes($maxSize) . ".";
-        }
-
-        return $errors;
+        // No restrictions - allow all file types
+        return [];
     }
 
     public function isAllowed(UploadedFile $file): bool
@@ -135,32 +67,8 @@ class FileSecurityService
      */
     public function validateFileByPath(string $filePath, string $originalFilename, int $fileSize): array
     {
-        $errors = [];
-
-        // Check extension
-        $extension = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
-        if (in_array($extension, $this->blockedExtensions)) {
-            $errors[] = "File type '.{$extension}' is not allowed for security reasons.";
-        }
-
-        // Check MIME type
-        $mimeType = mime_content_type($filePath);
-        if ($mimeType && in_array($mimeType, $this->blockedMimeTypes)) {
-            $errors[] = "File type '{$mimeType}' is not allowed for security reasons.";
-        }
-
-        // Double extension check
-        if ($this->hasDoubleExtension($originalFilename)) {
-            $errors[] = "Files with double extensions are not allowed.";
-        }
-
-        // Check file size
-        $maxSize = config('upload.max_file_size', 10737418240); // 10GB default
-        if ($fileSize > $maxSize) {
-            $errors[] = "File size exceeds the maximum allowed size of " . $this->formatBytes($maxSize) . ".";
-        }
-
-        return $errors;
+        // No restrictions - allow all file types
+        return [];
     }
 
     /**
@@ -168,47 +76,13 @@ class FileSecurityService
      */
     public function validateFilenameForUpload(string $filename, int $fileSize): array
     {
-        $errors = [];
-
-        // Check extension
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        if (empty($extension)) {
-            $errors[] = "File must have an extension.";
-        } elseif (in_array($extension, $this->blockedExtensions)) {
-            $errors[] = "File type '.{$extension}' is not allowed for security reasons.";
-        }
-
-        // Double extension check
-        if ($this->hasDoubleExtension($filename)) {
-            $errors[] = "Files with double extensions are not allowed.";
-        }
-
-        // Check file size
-        $maxSize = config('upload.max_file_size', 10737418240); // 10GB default
-        if ($fileSize > $maxSize) {
-            $errors[] = "File size exceeds the maximum allowed size of " . $this->formatBytes($maxSize) . ".";
-        }
-
-        return $errors;
+        // No restrictions - allow all file types
+        return [];
     }
 
     protected function hasDoubleExtension(string $filename): bool
     {
-        $parts = explode('.', $filename);
-        if (count($parts) < 3) {
-            return false;
-        }
-
-        // Check if any intermediate part is a blocked extension
-        array_pop($parts); // Remove the last extension
-        array_shift($parts); // Remove the filename
-
-        foreach ($parts as $part) {
-            if (in_array(strtolower($part), $this->blockedExtensions)) {
-                return true;
-            }
-        }
-
+        // No restrictions
         return false;
     }
 

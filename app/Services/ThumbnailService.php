@@ -108,6 +108,79 @@ class ThumbnailService
         }
     }
 
+    /**
+     * Generate thumbnail from a file path and return as binary string.
+     * Used for direct GCP uploads without storing locally.
+     */
+    public function generateThumbnailFromPath(string $filePath): ?string
+    {
+        try {
+            if (!file_exists($filePath)) {
+                return null;
+            }
+
+            $imageInfo = getimagesize($filePath);
+            if ($imageInfo === false) {
+                return null;
+            }
+
+            [$originalWidth, $originalHeight, $imageType] = $imageInfo;
+
+            $sourceImage = match ($imageType) {
+                IMAGETYPE_JPEG => imagecreatefromjpeg($filePath),
+                IMAGETYPE_PNG => imagecreatefrompng($filePath),
+                IMAGETYPE_GIF => imagecreatefromgif($filePath),
+                IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($filePath) : false,
+                IMAGETYPE_BMP => function_exists('imagecreatefrombmp') ? imagecreatefrombmp($filePath) : false,
+                default => false,
+            };
+
+            if ($sourceImage === false) {
+                return null;
+            }
+
+            $ratio = min($this->thumbnailWidth / $originalWidth, $this->thumbnailHeight / $originalHeight);
+
+            if ($ratio >= 1) {
+                $newWidth = $originalWidth;
+                $newHeight = $originalHeight;
+            } else {
+                $newWidth = (int) round($originalWidth * $ratio);
+                $newHeight = (int) round($originalHeight * $ratio);
+            }
+
+            $thumbnailImage = imagecreatetruecolor($newWidth, $newHeight);
+
+            if ($imageType === IMAGETYPE_PNG) {
+                imagealphablending($thumbnailImage, false);
+                imagesavealpha($thumbnailImage, true);
+                $transparent = imagecolorallocatealpha($thumbnailImage, 255, 255, 255, 127);
+                imagefilledrectangle($thumbnailImage, 0, 0, $newWidth, $newHeight, $transparent);
+            }
+
+            imagecopyresampled(
+                $thumbnailImage,
+                $sourceImage,
+                0, 0, 0, 0,
+                $newWidth, $newHeight,
+                $originalWidth, $originalHeight
+            );
+
+            // Capture output to string
+            ob_start();
+            imagejpeg($thumbnailImage, null, $this->thumbnailQuality);
+            $thumbnailData = ob_get_clean();
+
+            imagedestroy($sourceImage);
+            imagedestroy($thumbnailImage);
+
+            return $thumbnailData ?: null;
+        } catch (\Exception $e) {
+            report($e);
+            return null;
+        }
+    }
+
     public function getThumbnailPath(string $originalPath): string
     {
         // Convert: files/originals/2026/01/abc123.jpg -> files/thumbnails/2026/01/abc123.jpg

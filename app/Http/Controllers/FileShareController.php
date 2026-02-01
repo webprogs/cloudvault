@@ -220,10 +220,26 @@ class FileShareController extends Controller
         $share->incrementAccessCount();
 
         $file = $share->file;
-        $path = Storage::disk('local')->path($file->storage_path);
 
-        return response()->download($path, $file->name, [
-            'Content-Type' => $file->mime_type,
-        ]);
+        // If file is on GCP, stream from GCP
+        if ($file->isOnGcp()) {
+            return response()->streamDownload(function () use ($file) {
+                $stream = Storage::disk('gcs')->readStream($file->gcp_path);
+                fpassthru($stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }, $file->name, [
+                'Content-Type' => $file->mime_type,
+                'Content-Length' => $file->size,
+            ]);
+        }
+
+        // Local file download
+        if (!$file->storage_path || !Storage::disk('local')->exists($file->storage_path)) {
+            abort(404, 'File not found');
+        }
+
+        return Storage::disk('local')->download($file->storage_path, $file->name);
     }
 }

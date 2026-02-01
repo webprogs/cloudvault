@@ -38,7 +38,7 @@ class File extends Model
     public const DISK_LOCAL = 'local';
     public const DISK_GCS = 'gcs';
 
-    protected $appends = ['formatted_size', 'icon_type', 'is_shared', 'thumbnail_url'];
+    protected $appends = ['formatted_size', 'icon_type', 'is_shared', 'thumbnail_url', 'preview_url'];
 
     public function user(): BelongsTo
     {
@@ -118,7 +118,33 @@ class File extends Model
             return null;
         }
 
+        // If on GCP with thumbnail, return public GCP URL
+        if ($this->isOnGcp() && $this->thumbnail_path) {
+            return $this->getGcpPublicUrl($this->thumbnail_path);
+        }
+
+        // Fallback to local thumbnail endpoint
         return "/files/{$this->id}/thumbnail";
+    }
+
+    public function getPreviewUrlAttribute(): ?string
+    {
+        if ($this->isOnGcp()) {
+            return $this->getGcpPublicUrl($this->gcp_path);
+        }
+
+        return null;
+    }
+
+    public function getGcpPublicUrl(string $path): string
+    {
+        $bucket = config('filesystems.disks.gcs.bucket');
+        $prefix = config('filesystems.disks.gcs.path_prefix', '');
+
+        // Flysystem adds the prefix when writing, so full path is prefix/path
+        $fullPath = $prefix ? "{$prefix}/{$path}" : $path;
+
+        return "https://storage.googleapis.com/{$bucket}/{$fullPath}";
     }
 
     public function getFormattedSizeAttribute(): string
