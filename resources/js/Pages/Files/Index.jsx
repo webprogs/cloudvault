@@ -10,9 +10,12 @@ import ShareModal from '../../Components/Files/ShareModal';
 import MediaPreview from '../../Components/Files/MediaPreview';
 import MoveModal from '../../Components/Files/MoveModal';
 import GroupFoldersModal from '../../Components/Files/GroupFoldersModal';
+import PageDropOverlay from '../../Components/Files/PageDropOverlay';
+import InlineUploadProgress from '../../Components/Files/InlineUploadProgress';
 import Modal from '../../Components/UI/Modal';
 import Button from '../../Components/UI/Button';
 import useFileSort from '../../Hooks/useFileSort';
+import usePageDropzone from '../../Hooks/usePageDropzone';
 
 export default function FilesIndex({
     files,
@@ -43,11 +46,24 @@ export default function FilesIndex({
     const [moveItemType, setMoveItemType] = useState(null);
     const [selectedFolders, setSelectedFolders] = useState([]);
     const [showGroupModal, setShowGroupModal] = useState(false);
+    const [inlineUploadFiles, setInlineUploadFiles] = useState([]);
+    const [showInlineProgress, setShowInlineProgress] = useState(false);
 
     const { sortBy, sortOrder, handleSort } = useFileSort(
         filters.sort_by || 'created_at',
         filters.sort_order || 'desc'
     );
+
+    // Page-level drag-and-drop for file uploads
+    const handlePageFileDrop = useCallback((files) => {
+        setInlineUploadFiles(files);
+        setShowInlineProgress(true);
+    }, []);
+
+    const { isDragOver, dragHandlers } = usePageDropzone({
+        onFileDrop: handlePageFileDrop,
+        enabled: !showUploadModal, // Disable when modal is open
+    });
 
     const handleSelectFile = useCallback((fileId, clearAll = false) => {
         if (clearAll) {
@@ -242,7 +258,26 @@ export default function FilesIndex({
         <AppLayout title="My Files">
             <Head title="My Files" />
 
-            <div className="space-y-6">
+            {/* Page-level drag overlay */}
+            <PageDropOverlay
+                isVisible={isDragOver}
+                folderName={currentFolder?.name || 'My Files'}
+            />
+
+            {/* Inline upload progress panel */}
+            {showInlineProgress && (
+                <InlineUploadProgress
+                    files={inlineUploadFiles}
+                    folderId={currentFolder?.id}
+                    onComplete={() => router.reload({ only: ['files', 'stats'] })}
+                    onClose={() => {
+                        setShowInlineProgress(false);
+                        setInlineUploadFiles([]);
+                    }}
+                />
+            )}
+
+            <div {...dragHandlers} className="space-y-6">
                 {/* Toolbar */}
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                     <div className="flex flex-wrap items-center gap-3">

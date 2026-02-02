@@ -13,13 +13,14 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ValidateUploadedFileJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
-    public int $timeout = 120; // 2 minutes
+    public int $timeout = 600; // 10 minutes for large file uploads to GCP
     public int $backoff = 10;
 
     public function __construct(
@@ -80,14 +81,39 @@ class ValidateUploadedFileJob implements ShouldQueue
                 rmdir($tempDir);
             }
 
+            // Check if GCP upload is enabled - upload directly to GCP
+            $useGcp = config('upload.use_gcp', false);
+            $gcpPath = null;
+            $storageDisk = File::DISK_LOCAL;
+            $storagePath = $permanentPath;
+
+            if ($useGcp) {
+                // Upload directly to GCP
+                $gcpPath = $this->uploadToGcp($permanentFullPath, $extension);
+                $storageDisk = File::DISK_GCS;
+                $storagePath = null; // No local storage when using GCP
+
+                // Delete local file after successful GCP upload
+                if (file_exists($permanentFullPath)) {
+                    unlink($permanentFullPath);
+                }
+
+                // Clean up permanent directory if empty
+                $permDir = dirname($permanentFullPath);
+                if (is_dir($permDir) && count(scandir($permDir)) <= 2) {
+                    rmdir($permDir);
+                }
+            }
+
             // Create database record
             $file = File::create([
                 'user_id' => $this->session->user_id,
                 'folder_id' => $this->session->folder_id,
                 'name' => $securityService->sanitizeFilename($this->session->original_filename),
-                'storage_path' => $permanentPath,
-                'storage_disk' => File::DISK_LOCAL,
-                'processing_status' => File::PROCESSING_PROCESSING,
+                'storage_path' => $storagePath,
+                'gcp_path' => $gcpPath,
+                'storage_disk' => $storageDisk,
+                'processing_status' => File::PROCESSING_COMPLETED,
                 'upload_session_id' => $this->session->id,
                 'mime_type' => $mimeType,
                 'size' => $fileSize,
@@ -99,13 +125,13 @@ class ValidateUploadedFileJob implements ShouldQueue
                 'file_id' => $file->id,
                 'step' => FileProcessingLog::STEP_VALIDATION,
                 'status' => FileProcessingLog::STATUS_COMPLETED,
-                'message' => 'File validation passed',
+                'message' => $useGcp ? 'File validated and uploaded to GCP' : 'File validation passed',
                 'started_at' => now(),
                 'completed_at' => now(),
                 'created_at' => now(),
             ]);
 
-            Log::info("Validation completed for session: {$this->session->id}, file ID: {$file->id}");
+            Log::info("Validation completed for session: {$this->session->id}, file ID: {$file->id}, storage: {$storageDisk}");
 
             // Dispatch thumbnail job for images
             $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
@@ -113,14 +139,8 @@ class ValidateUploadedFileJob implements ShouldQueue
                 GenerateThumbnailJob::dispatch($file);
             }
 
-            // Dispatch GCP upload job if enabled
-            if (config('upload.use_gcp', false)) {
-                UploadToGcpJob::dispatch($file);
-            } else {
-                // Mark as completed if not uploading to GCP
-                $file->update(['processing_status' => File::PROCESSING_COMPLETED]);
-                $this->session->markAsCompleted();
-            }
+            // Mark session as completed
+            $this->session->markAsCompleted();
 
         } catch (\Throwable $e) {
             Log::error("Validation failed for session: {$this->session->id}", [
@@ -152,6 +172,42 @@ class ValidateUploadedFileJob implements ShouldQueue
         } catch (\Throwable $e) {
             Log::warning("Failed to cleanup assembled file: {$e->getMessage()}");
         }
+    }
+
+    protected function uploadToGcp(string $localFilePath, string $extension): string
+    {
+        $date = now();
+        $gcpPath = sprintf(
+            'files/%s/%s/%s.%s',
+            $date->format('Y'),
+            $date->format('m'),
+            Str::random(40),
+            $extension
+        );
+
+        Log::info("Uploading to GCP: {$gcpPath}");
+
+        $stream = fopen($localFilePath, 'r');
+        if (!$stream) {
+            throw new \RuntimeException("Failed to open file for GCP upload: {$localFilePath}");
+        }
+
+        try {
+            Storage::disk('gcs')->writeStream($gcpPath, $stream);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        // Verify upload
+        if (!Storage::disk('gcs')->exists($gcpPath)) {
+            throw new \RuntimeException("GCP upload verification failed for: {$gcpPath}");
+        }
+
+        Log::info("GCP upload successful: {$gcpPath}");
+
+        return $gcpPath;
     }
 
     public function failed(\Throwable $exception): void
